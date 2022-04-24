@@ -1,0 +1,133 @@
+name: EHRbase Performance Test
+        
+on:
+  workflow_dispatch:
+    inputs:
+      threads:
+        description: Number of threads (users)
+        default: '5'
+      ramp-up:
+        description: Ramp-up period (seconds)
+        default: '15'
+      loop-count:
+        description: Loop count
+        default: '100'
+#   schedule:
+#     - cron: '0 0 * * *'     
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+  
+    steps:   
+      - name: Install Hetzner Cloud CLI
+        run: sudo apt install -y hcloud-cli
+
+      - name: Setup SSH
+        run: |
+          mkdir ~/.ssh
+          cat > ~/.ssh/known_hosts << EOF
+          $SSH_HOST $SSH_FINGERPRINT
+          EOF
+          cat > ~/.ssh/id_ed25519 << EOF
+          $SSH_KEY
+          EOF
+          chmod 600 ~/.ssh/id_ed25519
+          cat > ~/.ssh/config << EOF
+          Host ehrbase-load-test
+            HostName $SSH_HOST
+            User $SSH_USER
+            IdentityFile ~/.ssh/id_ed25519
+          EOF
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_FINGERPRINT: ${{ secrets.SSH_FINGERPRINT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+      
+      - name: Rebuild server
+        run: hcloud server rebuild --image=$HCLOUD_IMAGE $HCLOUD_SERVER
+        env:
+          HCLOUD_IMAGE: 68104007
+          HCLOUD_SERVER: 19045767
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+        timeout-minutes: 15
+      
+      - name: Start minikube
+        run: ssh ehrbase-load-test "minikube start --driver=none"
+
+      - name: Install EHRbase and WebTester
+        run: |
+          cat > startup.sh << 'EOF'
+          #!/bin/bash
+
+          set -e
+          
+          helm install ehrbase-load-test-deployment ~/ehrbase-helm-chart-hetzner/
+
+          until [ $(curl -s -o /dev/null -w "%{http_code}" "http://localhost:30901/ehrbase/rest/status") == 200 ] && \
+            [ $(curl -s -u webtester:Dctm1234 "http://localhost:30902/webtester/actuator/health" | jq '.status') == "\"UP\"" ];
+          do
+            echo "Installing EHRbase and WebTester..."
+            sleep 30
+          done
+
+          echo "EHRbase and WebTester are ready for testing!"
+          EOF
+          chmod +x startup.sh
+          scp startup.sh ehrbase-load-test:~/scripts/
+          ssh ehrbase-load-test '~/scripts/startup.sh'
+        timeout-minutes: 10
+           
+      - name: Run performance tests
+        run: |
+          cat > run_tests.sh << 'EOF'
+          #!/bin/bash
+          
+          set -e
+          
+          THREADS=${1:-5}
+          RAMP_UP=${2:-15}
+          LOOP_COUNT=${3:-100}
+          
+          echo "Start performance tests on EHRbase:"
+          echo "Threads: $THREADS"
+          echo "Ramp up: $RAMP_UP"
+          echo "Loop count: $LOOP_COUNT"
+          
+          EXECUTION_ID=$(curl -X POST \
+            -f -s -S \
+            -u webtester:Dctm1234 \
+            -H 'Content-Type: application/json' \
+            -d "{\"host\":\"ehrbase-service.default.svc.cluster.local\",\"threads\":$THREADS,\"rampUp\":$RAMP_UP,\"loopCount\":$LOOP_COUNT}" \
+            "http://localhost:30902/webtester/rest/jmeter/test-plans/ehrbase_horizontal_scaling/start")
+            
+            until [ $(curl -s -u webtester:Dctm1234 "http://localhost:30902/webtester/rest/jmeter" | jq '.active') == "false" ];
+            do
+              echo "Performance tests are running..."
+              sleep 1m
+            done
+            echo "Performance tests completed!"
+            echo $EXECUTION_ID
+          EOF
+          chmod +x run_tests.sh
+          scp run_tests.sh ehrbase-load-test:~/scripts/
+          EXECUTION_ID=$(ssh ehrbase-load-test "~/scripts/run_tests.sh ${{ github.event.inputs.threads }} ${{ github.event.inputs.ramp-up }} ${{ github.event.inputs.loop-count }} | tail -1")
+          echo "EXECUTION_ID=$EXECUTION_ID" >> $GITHUB_ENV
+        timeout-minutes: 240
+    
+      - name: Generate report
+        run: ssh ehrbase-load-test "curl -X POST -f -s -u webtester:Dctm1234 http://localhost:30902/webtester/rest/jmeter/test-executions/${{ env.EXECUTION_ID }}/generate-report"
+        
+      - name: Download report
+        run: |
+          ssh ehrbase-load-test "curl -s -u webtester:Dctm1234 http://localhost:30902/webtester/rest/jmeter/test-executions/${{ env.EXECUTION_ID }}/report -o ~/report.zip"
+          scp ehrbase-load-test:~/report.zip report.zip
+          unzip report.zip -d ~
+           
+      - name: Publish report
+        uses: JamesIves/github-pages-deploy-action@3.7.1
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: gh-pages
+          FOLDER: ~/report/
