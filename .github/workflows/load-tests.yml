@@ -125,11 +125,13 @@ jobs:
       - name: Generate report
         run: ssh ehrbase-load-test "curl -X POST -f -s -u webtester:Dctm1234 http://localhost:30902/webtester/rest/jmeter/test-executions/${{ env.EXECUTION_ID }}/generate-report"
         
-      - name: Download report
+      - name: Download JTL and report
         run: |
           ssh ehrbase-load-test "curl -s -u webtester:Dctm1234 http://localhost:30902/webtester/rest/jmeter/test-executions/${{ env.EXECUTION_ID }}/report -o ~/report.zip"
+          ssh ehrbase-load-test "curl -s -u webtester:Dctm1234 http://localhost:30902/webtester/rest/jmeter/test-executions/${{ env.EXECUTION_ID }}/logfile -o ~/log.jtl"
           scp ehrbase-load-test:~/report.zip report.zip
           unzip report.zip -d ~
+          scp ehrbase-load-test:~/log.jtl ~/report/log.jtl
            
       - name: Publish report
         uses: JamesIves/github-pages-deploy-action@3.7.1
