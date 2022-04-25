@@ -107,14 +107,17 @@ jobs:
             -H 'Content-Type: application/json' \
             -d "{\"host\":\"ehrbase-service.default.svc.cluster.local\",\"threads\":$THREADS,\"rampUp\":$RAMP_UP,\"loopCount\":$LOOP_COUNT}" \
             "http://localhost:30902/webtester/rest/jmeter/test-plans/ehrbase_horizontal_scaling/start")
-            
-            until [ $(curl -s -u webtester:Dctm1234 "http://localhost:30902/webtester/rest/jmeter" | jq '.active') == "false" ];
-            do
-              echo "Performance tests are running..."
-              sleep 1m
-            done
-            echo "Performance tests completed!"
-            echo $EXECUTION_ID
+          
+          echo "Start test execution: $EXECUTION_ID"
+          
+          until [ $(curl -f -s -S -u webtester:Dctm1234 "http://localhost:30902/webtester/rest/jmeter" | jq '.active') == "false" ];
+          do
+            echo "Performance tests are running..."
+            sleep 1m
+          done
+          
+          echo "Performance tests completed!"
+          echo $EXECUTION_ID
           EOF
           chmod +x run_tests.sh
           scp run_tests.sh ehrbase-load-test:~/scripts/
