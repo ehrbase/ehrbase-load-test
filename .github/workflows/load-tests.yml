@@ -51,6 +51,7 @@ jobs:
       - name: Rebuild server
         run: |
           hcloud server rebuild --image=$HCLOUD_IMAGE $HCLOUD_SERVER
+          echo "Waiting for SSH service to be ready..."
           sleep 1m
         env:
           HCLOUD_IMAGE: 68159203
