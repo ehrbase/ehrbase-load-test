@@ -12,8 +12,8 @@ on:
       loop-count:
         description: Loop count
         default: '100'
-#   schedule:
-#     - cron: '0 0 * * *'     
+  schedule:
+    - cron: '0 0 * * *'     
 
 jobs:
   build:
@@ -45,13 +45,13 @@ jobs:
           SSH_USER: ${{ secrets.SSH_USER }}
           SSH_KEY: ${{ secrets.SSH_KEY }}
       
-#       - name: Rebuild server
-#         run: hcloud server rebuild --image=$HCLOUD_IMAGE $HCLOUD_SERVER
-#         env:
-#           HCLOUD_IMAGE: 68104007
-#           HCLOUD_SERVER: 19045767
-#           HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
-#         timeout-minutes: 15
+      - name: Rebuild server
+        run: hcloud server rebuild --image=$HCLOUD_IMAGE $HCLOUD_SERVER
+        env:
+          HCLOUD_IMAGE: 68159203
+          HCLOUD_SERVER: 19045767
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+        timeout-minutes: 15
       
       - name: Start minikube
         run: ssh ehrbase-load-test "minikube start --driver=none"
