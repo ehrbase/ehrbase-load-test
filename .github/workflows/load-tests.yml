@@ -37,6 +37,10 @@ jobs:
           EOF
           chmod 600 ~/.ssh/id_ed25519
           cat > ~/.ssh/config << EOF
+          Host *
+            ServerAliveInterval 30
+            ServerAliveCountMax 5
+
           Host ehrbase-load-test
             HostName $SSH_HOST
             User $SSH_USER
