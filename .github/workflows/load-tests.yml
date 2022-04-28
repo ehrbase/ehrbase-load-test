@@ -75,7 +75,7 @@ jobs:
       - name: Update Docker image
         if: "${{ github.event.inputs.image != '' }}"
         run: |
-          ssh ehrbase-load-test "sed -i '0,/^\([[:space:]]*ehrbase: \).*/s||\1${{ github.event.inputs.image }}|' values.yaml"
+          ssh ehrbase-load-test "sed -i '0,/^\([[:space:]]*ehrbase: \).*/s||\1${{ github.event.inputs.image }}|' ~/ehrbase-helm-chart-hetzner/values.yaml"
 
       - name: Install EHRbase and WebTester
         run: |
